@@ -1,0 +1,810 @@
+Harvey Zhao
+COM SCI 32 - SPRING 2022
+PROJECT 3 REPORT
+
+////////////////////////////////////////////////////////////////
+A description of the design of your data structures. For example, how do you represent the board? How do you record shots made?
+////////////////////////////////////////////////////////////////
+
+- GameImpl -
+----------------
+vector<Ship> m_ships; //Created to contain a list of ships
+Whenever the user add a ship, I will allocate a new Ship object and store it inside GameImpl.
+Each Ship contains:
+   int m_len;
+   char m_symbol;
+   std::string m_name;
+
+	Ship(int length, char symbol, std::string name);
+   int getLength() const;	//get m_len
+   char getSymbol() const;	//get m_symbol
+   std::string getName() const; //get m_name
+  	~Ship();
+
+Use for ship: 
+Game has these functions:
+
+	bool addShip(int length, char symbol, std::string name);
+   int nShips() const;
+   int shipLength(int shipId) const;
+   char shipSymbol(int shipId) const;
+   std::string shipName(int shipId) const;
+
+if we want to add a ship to the game, we would simply call addShip and GameImpl would push back a Ship object at the end of the vector.
+
+If we want to know something about the ship, we will just access the shipIdth element of the vector, and call the public functions in there to return the value we want.
+
+- BoardImpl -
+--------------
+    char m_board[MAXROWS][MAXCOLS];	//contains info about every grid of the board of the player
+    bool m_placement[MAXROWS][MAXCOLS]; //each index represents if the grid can be placed by ships; used by block() and unblock()
+    set<int> m_placedShips;	//list of ShipIds the player placed on the board
+
+The functions on here work together with functions from the Player class. 
+Say we want to attack a specific location on our board and make sure that we won't waste a shot and make an optimized move. m_board is the fundamental record-keeper behind the BoardImpl class. It creates a MAXROWS * MAXCOLS 2D array that stores shipSymbols (if unattacked), destroyed segments (X) and missed shots (o).
+
+m_placement is used in conjunction with m_board. It copies the dimension of m_board, except for that we randommly give each grid in the board a number 0 or 1, 0 means this grid is not to be attacked and 1 means otherwise. When the MediocrePlayer and GoodPlayer use their placeShip() function recursively, we will use this grid to rule out further so that the position we place our ship is random.
+m_placedShips keeps track of the ships that are placed onto the board. This can be very useful for our recursive placeShip and unplaceShip function as well, because we want to search if the ship we want to modify is in the board or not.
+
+- MediocrePlayer -
+------------------
+	int m_state;
+	Point m_lastHit;    //the last hit point on any ship on the board.
+	set<pair<int, int>> m_pointHistory; //points on the board that the AI attempted to attack.
+	
+	As defined by the algorithm, m_state indicates the current strategy the MediocrePlayer is doing. It is useful for our recommendAttack() and recordAttackResults() function. In state 1, the player attempts to randomly pick a point that has never been picked on and is valid.
+
+	For example, when a ship is placed horizontally on a 4 * 4 board from (2, 1) to (2, 3), we try to hit (2, 2) and it was spot on. We change the state from 1 to 2 as we have hit a ship. Then, we store (2, 2) into our m_pointHistory container. 
+	Next, we attempt to check if there is any ship within the vicinity by picking a random point in a cross. We search the random Point within m_pointHistory and see if it has already been stored there, which means we have already attacked that place and we would miss a shot. In this case, we would generate another random point and repeat the steps.
+
+
+- GoodPlayer -
+-------------------
+    int m_state;	//used to pick attack strategy
+    Point m_firstBlindTry;	//the last point we randomly picked in the board
+    Point m_lastHit;    //the last hit point on any ship on the board.
+    pair<int, Orientation> m_lastAttack;	//contains an integer that tracks how far away the last attack is from our first-hit point in the vicinity; an orientation that record to which direction this point is with respect to m_lastHit.
+    set<pair<int, int>> m_pointHistory; //points on the board that the AI attempted to attack.
+
+    the methodology will be discussed at a later section.
+
+
+////////////////////////////////////////////////////////////////
+A prose description of your GoodPlayer's strategies for placing ships and recommending moves. If they're easy to describe, this may well be only a paragraph or two. This is a high-level summary; details go in the pseudocode.
+////////////////////////////////////////////////////////////////
+
+The GoodPlayer has similar strategies to MediocrePlayer, except for that made two optimization based on it.
+The placement of ships have the exact same algorithm as MediocrePlayer, which guarantee a fair degree of randomness to each ship's placement and orientation.
+
+The attack algorithm of GoodPlayer made two changes: 
+1. It reimagined the board as a checkerBoard, and only attempt to guess where the ship is on the same color until one color runs out.
+2. When the guessed point is where the enemy's ship is, it will use a DFS algorithm to figure out where the ship is at.
+
+
+////////////////////////////////////////////////////////////////
+Pseudocode for non-trivial algorithms. For example, how does a MediocrePlayer place ships? How does your GoodPlayer implement its strategies?
+////////////////////////////////////////////////////////////////
+MediocrePlayer:
+
+//Helper Functions//
+//returns a Random point in the CROSS
+Point randPoint(int targetr, int targetc)
+{
+    int randr, randc;
+    int rc = randInt(2);    //0 means row random, 1 means col random
+    if (rc == 0)
+    {
+        randr = -4 + targetr + randInt(9);
+        randc = targetc;
+    }
+    else
+    {
+        randr = targetr;
+        randc = -4 + targetc + randInt(9);
+    }
+    return Point(randr, randc);
+}
+
+bool MediocrePlayer::placeShips(Board& b)
+{
+	 //after 50 trials, it will give up trying
+    for (int i = 0; i < 50; i++)
+    {
+        b.block();	//block half of its own grid randomly
+        //attempt to place ships in the unblocked grid.
+        if (recursivePlace(b, 0))
+        {
+            b.unblock();
+            return true;
+        }
+        //if it is not able to place all the ships on the board, it will unblock the grid and retry.
+        b.unblock();
+    }
+    return false;
+}
+
+//helper function of placeShips()
+bool MediocrePlayer::recursivePlace(Board& b, int shipId)
+{
+   if (shipId >= game().nShips())  return true;
+    
+   for (rows)
+ 		for (cols)
+ 			if (place success)
+ 			{
+	 			if (can_place_next_ship)	return true;
+	 			else	unplace_current_ship
+ 			}
+
+    return false;
+}
+
+//check if the cross has any unattacked space for us to attack
+bool MediocrePlayer::crossHasSpace(Point target)
+{
+    for (int i = -4; i < 5; i++)
+    {
+        if (row + i in range && Point(row + i, c) is not found in m_pointHistory)
+            return true;
+        if (col + i in range 
+        		&& Point(row, col + i) is not found in m_pointHistory)
+            return true;
+    }
+    return false;
+}
+
+bool MediocrePlayer::isValid(Point target)
+{
+    if (!game().isValid(target))    return false;
+    if (m_pointHistory.find(make_pair(target.r, target.c)) != m_pointHistory.end()) return false;
+    else return true;
+}
+
+Point MediocrePlayer::recommendAttack()
+{
+    Point target = game().randomPoint();
+    int numCoords = game().rows() * game().cols();
+
+    //IF THE WE HAVE ALREADY TRIED EVERY NUMBER
+    	RETURN;
+    
+    //STATE 2 - GUESSING IN THE VICINITY OF THE LAST SUCCESSFUL ATTACK
+    if (m_state == 2)
+    {
+        //select a legit point
+        bool isDoable = true;
+        
+        Point target = randPoint(m_lastHit.r, m_lastHit.c); //FIXME: I am removing the Point declaration. lmk if this is wrong
+        
+        try generating all coordinates in the vicinity of m_lastHit
+        {
+            if (!crossHasSpace(target))
+            {
+                isDoable = false;
+                break;
+            }
+            target = randPoint(m_lastHit.r, m_lastHit.c);
+        }
+        
+        if (!isDoable)
+            m_state = 1;
+        else
+        {
+            m_pointHistory.insert(make_pair(target.r, target.c));
+            return target;
+        }
+    }
+    
+    if (m_state == 1)
+    {
+        while (the point has already been attacked)
+            target = newRandPoint;
+
+        m_pointHistory.insert(newRandPoint);
+        return target;
+    }
+   
+   //return an invalid point (all of the condition outlined above has to be met)
+   return Point(-1, -1);
+}
+
+void MediocrePlayer::recordAttackResult(Point p, bool validShot, bool shotHit, bool shipDestroyed, int shipId)
+{
+    if (!validShot) return;
+    
+    if (m_state == 1)
+    {
+        if (!shotHit || shipDestroyed)  return;
+        else
+        {
+            m_lastHit = p;
+            m_state = 2;
+        }
+    }
+    if (m_state == 2)
+    {
+        if (!shotHit)   return;
+        else if (!shipDestroyed){}
+        else    m_state = 1;
+    }
+}
+
+void MediocrePlayer::recordAttackByOpponent(Point p)
+{
+    //do nothing
+}
+
+///////////////////////////////////////////////////////
+/////////////////////GoodPlayer////////////////////////
+///////////////////////////////////////////////////////
+
+//Helper Functions//
+//returns a Random point in the diagonals
+Point randPointOnDiagonal(int targetr, int targetc)
+{
+    int randr = -1, randc = -1;
+    int randomDiff = -MAXROWS + randInt(MAXCOLS * 2);
+    
+    int num = randInt(5);
+    switch(num)
+    {
+        case 0:
+            randr = targetr - randomDiff;
+            randc = targetc - randomDiff;
+            break;
+        case 1:
+            randr = targetr - randomDiff;
+            randc = targetc + randomDiff;
+            break;
+        case 2:
+            randr = targetr + randomDiff;
+            randc = targetc - randomDiff;
+            break;
+        case 3:
+            randr = targetr + randomDiff;
+            randc = targetc + randomDiff;
+            break;
+        default:
+            break;
+    }
+    return Point(randr, randc);
+}
+
+bool GoodPlayer::isSwitchColor(char color)
+{
+    for (int i = 0; i < game().rows(); i++)
+    {
+        for (int j = 0; j < game().cols(); j++)
+        {
+            if (color == 'b')
+            {
+                if ((i + j) % 2 == 0 && m_pointHistory.find(make_pair(i, j)) == m_pointHistory.end())
+                    return false;
+            }
+            else
+            {
+                if ((i + j) % 2 == 1 && m_pointHistory.find(make_pair(i, j)) == m_pointHistory.end())
+                    return false;
+            }
+        }
+    }
+    return true;
+}
+bool GoodPlayer::recursivePlace(Board& b, int shipId)
+{
+    if (shipId >= game().nShips())  return true;
+    
+    for (int row = 0; row < game().rows(); row++)
+    {
+        for (int col = 0; col < game().cols(); col++)
+        {
+            if (b.placeShip(Point(row, col), shipId, HORIZONTAL))
+            {
+                if (recursivePlace(b, shipId + 1))  return true;
+                else b.unplaceShip(Point(row, col), shipId, HORIZONTAL);
+            }
+
+            if (b.placeShip(Point(row, col), shipId, VERTICAL))
+            {
+                if (recursivePlace(b, shipId + 1))  return true;
+                else b.unplaceShip(Point(row, col), shipId, VERTICAL);
+            }
+        }
+    }
+    return false;
+}
+
+bool GoodPlayer::placeShips(Board& b)
+{
+    for (int i = 0; i < 50; i++)
+    {
+        b.block();
+        if (recursivePlace(b, 0))
+        {
+            b.unblock();
+            return true;
+        }
+        b.unblock();
+    }
+    return false;
+}
+
+//assumes that target is in Board!
+bool GoodPlayer::diagonalHasSpace(Point target)
+{
+    int numIterations = max(game().rows(), game().cols());
+    
+    for (int i = 1; i < numIterations; i++)
+    {
+        //top left
+        if (target.r - i >= 0 && target.c - i >= 0 && m_pointHistory.find(make_pair(target.r - i, target.c - i)) == m_pointHistory.end())
+            return true;
+        
+        //top right
+        if (target.r - i >= 0 && target.c + i < game().cols() && m_pointHistory.find(make_pair(target.r - i, target.c + i)) == m_pointHistory.end())
+            return true;
+        
+        //bottom left
+        if (target.r + i < game().rows() && target.c - i >= 0 && m_pointHistory.find(make_pair(target.r + i, target.c - i)) == m_pointHistory.end())
+            return true;
+        
+        if (target.r + i < game().rows() && target.c + i < game().cols() && m_pointHistory.find(make_pair(target.r + i, target.c + i)) == m_pointHistory.end())
+            return true;
+    }
+    return false;
+}
+
+bool GoodPlayer::isValid(Point target)
+{
+    if (!game().isValid(target))    return false;
+    if (m_pointHistory.find(make_pair(target.r, target.c)) != m_pointHistory.end()) return false;
+    else return true;
+}
+
+Point GoodPlayer::recommendAttack()
+{
+    //choose the black ones first
+    //only check those to the diagonal of the current target
+    int numCoords = game().rows() * game().cols();
+    if (m_pointHistory.size() >= numCoords)
+        return Point(-1, -1);
+    
+    //if a ship is hit
+    if (m_state == 2)
+    {
+        bool isDoable = true;
+        
+        Point target = state2Attack();
+        //try generating all coordinates in the vicinity of m_lastHit
+        while (!isValid(target) || (target.r == m_lastHit.r && target.c == m_lastHit.c))
+        {
+            if (!crossHasSpace(target))
+            {
+                isDoable = false;
+                break;
+            }
+            target = state2Attack();
+        }
+        
+        if (!isDoable)  m_state = 1;
+        else
+        {
+            m_pointHistory.insert(make_pair(target.r, target.c));
+            return target;
+        }
+    }
+    
+    //state 3. randomly finding a point on the diagonal
+    if (m_state == 3)
+    {
+        //randomly select a point based off of the diagonal space of m_firstBlindTry.
+        Point target = randPointOnDiagonal(m_firstBlindTry.r, m_firstBlindTry.c);
+        if (!diagonalHasSpace(m_firstBlindTry)) m_state = 1;
+        else
+        {
+            while(!isValid(target))
+                target = randPointOnDiagonal(m_firstBlindTry.r, m_firstBlindTry.c);
+            m_pointHistory.insert(make_pair(target.r, target.c));
+            return target;
+        }
+    }
+    
+    //state 1. randomly finding a point(when the current diagonal is full)
+    if (m_state == 1)
+    {
+        Point target = betterRandomPoint('w');
+        
+        while (m_pointHistory.find(make_pair(target.r, target.c)) != m_pointHistory.end())
+        {
+            if (isSwitchColor('w'))
+                target = betterRandomPoint('b');
+            else
+                target = betterRandomPoint('w');
+        }
+        m_pointHistory.insert(make_pair(target.r, target.c));
+        m_firstBlindTry = target;
+        return target;
+    }
+
+    //return an invalid point (all of the condition outlined above has to be met)
+    return Point(-1, -1);
+}
+
+Point GoodPlayer::betterRandomPoint(char color)
+{
+    int randr = randInt(game().rows()), randc = randInt(game().cols());
+    if (color == 'b')
+    {
+        while ((randr + randc) % 2 != 0)
+        {
+            randr = randInt(game().rows());
+            randc = randInt(game().cols());
+        }
+        return Point(randr, randc);
+    }
+    else if (color == 'w')
+    {
+        while ((randr + randc) % 2 != 1)
+        {
+            randr = randInt(game().rows());
+            randc = randInt(game().cols());
+        }
+        return Point(randr, randc);
+    }
+    else    return Point(-1, -1);
+}
+
+void GoodPlayer::recordAttackResult(Point p, bool validShot, bool shotHit, bool shipDestroyed, int shipId)
+{
+    if (!validShot)
+        return;
+    
+    //BLINDLY PICKING AN AVAILABLE COORDINATE IN BLACK/WHITE COORDINATES IN THE CHECKERBOARD
+    if (m_state == 1)
+    {
+        if (!shotHit || shipDestroyed)
+        {
+            m_state = 3;
+            return;
+        }
+        else
+        {
+            m_lastHit = p;
+            m_state = 2;
+        }
+    }
+
+    //DFS ALGORITHM TO FIGURE OUT WHERE SHIP IS 
+    else if (m_state == 2)
+    {
+        if (!shotHit)
+        {
+            //reset m_lastAttack
+            m_lastAttack.first = 0;
+            //switch up direction
+            switch(m_lastAttack.second)
+            {
+                case UP:
+                    m_lastAttack.second = RIGHT;
+                    break;
+                case RIGHT:
+                    m_lastAttack.second = DOWN;
+                    break;
+                case DOWN:
+                    m_lastAttack.second = LEFT;
+                    break;
+                case LEFT:
+                    m_lastAttack.second = UP;
+                    break;
+                default:
+                    break;
+            }
+        }
+        else if (!shipDestroyed){}
+        else
+        {
+            m_lastAttack = make_pair(0, UP);    //reset m_lastAttack;
+            m_state = 1;
+        }
+    }
+    
+    //GUESSING DIAGONALLY
+    else
+    {
+        if (shotHit && !shipDestroyed)
+        {
+            m_lastHit = p;
+            m_state = 2;
+        }
+    }
+}
+
+void GoodPlayer::recordAttackByOpponent(Point p)
+{
+    //DO NOTHING
+}
+
+
+//functions that are not tested yet.
+//check if the entire cross has space
+bool GoodPlayer::crossHasSpace(Point target)
+{
+    int maxCheck = max(game().rows(), game().cols());
+    
+    for (int i = 0; i < maxCheck; i++)
+    {
+        if (i < game().rows() && m_pointHistory.find(make_pair(i, target.c)) == m_pointHistory.end())
+            return true;
+        if (i < game().cols() && m_pointHistory.find(make_pair(target.r, i)) == m_pointHistory.end())
+            return true;
+    }
+    return false;
+}
+
+//IF STATE2 fails to attack the indicated location, reset m_lastAttack's parameters to 0 and new orientation
+//returns a point in the CROSS
+Point GoodPlayer::state2Attack()
+{
+    int lastHitr = m_lastHit.r;
+    int lastHitc = m_lastHit.c;
+    
+    switch(m_lastAttack.second)
+    {
+    UP -> RIGHT -> DOWN -> LEFT
+        case DIR(COULD BE UP, RIGHT, DOWN, LEFT):
+        {
+        		calculate the difference between the OG attack point and the current point
+            do
+            {
+                if (target.r < 0)
+                {
+                    m_lastAttack.first = 0;
+                    m_lastAttack.second = NEXT DIR;
+                    break;
+                }
+                else if (m_pointHistory.find(make_pair(target.r, target.c)) == m_pointHistory.end())
+                {
+                    m_lastAttack.first = difference + 1;
+                    m_lastAttack.second = DIR;
+                    return target;
+                }
+                else
+                {
+                    MAKE NECESSARY ADJUSTMENT TO THE COORDINATE OF TARGET
+                    m_lastAttack.first++;
+                }
+            } while(game().isValid(target));
+            break;
+        }
+        default:
+            return Point(-1, -1);
+    }
+    return Point(-1, -1);
+}
+
+///////////////////////////////////////////////////////
+/////////////////////BoardImpl////////////////////////
+///////////////////////////////////////////////////////
+
+
+void BoardImpl::clear()
+{
+    for (int i = 0; i < m_game.rows(); i++)
+        for (int j = 0; j < m_game.cols(); j++)
+            m_board[i][j] = '.';
+    unblock();
+    m_placedShips.clear();
+}
+
+void BoardImpl::block()
+{
+    // TODO:  Replace this with code to block half of the cells on the board
+    int nRows = m_game.rows(), nCols = m_game.cols();
+    int numSpots = nRows * nCols, counter = 0;
+    while (counter < numSpots / 2)
+    {
+        int targetR = randInt(nRows), targetC = randInt(nCols);
+        if (m_placement[targetR][targetC])
+        {
+            m_placement[targetR][targetC] = false;
+            counter++;
+        }
+    }
+}
+
+void BoardImpl::unblock()
+{
+    for (int i = 0; i < m_game.rows(); i++)
+        for (int j = 0; j < m_game.cols(); j++)
+            m_placement[i][j] = true;
+}
+
+bool BoardImpl::placeChecker(Point tol, int id, Direction dir)
+{
+    //1. The shipId is invalid
+    int r = tol.r, c = tol.c, len = m_game.shipLength(id);
+    int nRows = m_game.rows(), nCols = m_game.cols();
+    
+    if (id >= m_game.nShips() || id < 0)  return false;
+    else if (r < 0 || r >= nRows || c < 0 || c >= nCols) return false;
+    
+    //2. The ship would be partly or fully outside the board.
+    //3. The ship would overlap an already-placed ship.
+    //    4. The ship would overlap one or more positions that were blocked by a previous
+    //    call to the block function.
+    if (dir == HORIZONTAL)
+    {
+        if (c + len - 1 >= nCols)
+            return false;
+        //check if there is any grid that has a value other than '.'
+        for (int i = 0; i < len; i++)
+        {
+            if ((m_board[r][c + i] != 'o' && m_board[r][c + i] != '.') || (!m_placement[r][c + i]))
+                return false;
+        }
+    }
+    
+    if (dir == VERTICAL)
+    {
+        if (r + len - 1 >= nRows)
+            return false;
+        for (int i = 0; i < len; i++)
+            if ((m_board[r + i][c] != 'o' && m_board[r + i][c] != '.') || (!m_placement[r + i][c]))
+                return false;
+    }
+    
+    //    5. The ship with that ship ID has previously been placed on this Board and not
+    //    yet been unplaced since its most recent placement.
+    //search for the same shipId
+    if (m_placedShips.find(id) != m_placedShips.end())  return false;
+    
+    return true;
+}
+
+bool BoardImpl::unplaceChecker(Point tol, int id, Direction dir)
+{
+    //0. The r and c are invalid.
+    if (tol.r < 0 || tol.r >= m_game.rows() || tol.c < 0 || tol.c >= m_game.cols()) return false;
+    //1. The shipId is invalid
+    else if (id >= m_game.nShips() || id < 0)  return false;
+    //2. The board does not contain the entire ship at the indicated locations.
+    char shipSymbol = m_game.shipSymbol(id);
+    for (int i = 0; i < m_game.shipLength(id); i++)
+    {
+        if (dir == HORIZONTAL)
+            if (m_board[tol.r][tol.c + i] != shipSymbol)    return false;
+        if (dir == VERTICAL)
+            if (m_board[tol.r + i][tol.c] != shipSymbol)    return false;
+    }
+    return true;
+}
+
+bool BoardImpl::placeShip(Point topOrLeft, int shipId, Direction dir)
+{
+    if (!placeChecker(topOrLeft, shipId, dir))  return false;
+    if (dir == HORIZONTAL)
+        for (int i = 0; i < m_game.shipLength(shipId); i++)
+            m_board[topOrLeft.r][topOrLeft.c + i] = m_game.shipSymbol(shipId);
+    
+    else if (dir == VERTICAL)
+    {
+        for (int i = 0; i < m_game.shipLength(shipId); i++)
+            m_board[topOrLeft.r + i][topOrLeft.c] = m_game.shipSymbol(shipId);
+    }
+    
+    m_placedShips.insert(shipId);   //TODO: check if this actually works
+    return true;
+}
+
+bool BoardImpl::unplaceShip(Point topOrLeft, int shipId, Direction dir)
+{
+    if (!unplaceChecker(topOrLeft, shipId, dir))    return false;
+    if (dir == HORIZONTAL)
+        for (int i = 0; i < m_game.shipLength(shipId); i++)
+            m_board[topOrLeft.r][topOrLeft.c + i] = '.';
+    
+    else if (dir == VERTICAL)
+    {
+        for (int i = 0; i < m_game.shipLength(shipId); i++)
+            m_board[topOrLeft.r + i][topOrLeft.c] = '.';
+    }
+    
+    m_placedShips.erase(shipId);
+    return true;
+}
+
+void BoardImpl::display(bool shotsOnly) const
+{
+    //First line: The function must print two spaces followed by the digits for each column, starting at 0, followed by a newline. You may assume there will be no more than 10 columns.
+    cout << "  ";
+    for (int i = 0; i < m_game.cols(); i++) cout << i;
+    cout << endl;
+        
+    //Remaining lines: The function must print a digit specifying the row number, starting at 0, followed by a space, followed by the contents of the current row, followed by a newline. You may assume there will be no more than 10 rows. In each of the positions of the row, use the following characters to represent the playing field:
+    for (int i = 0; i < m_game.rows(); i++)
+    {
+        cout << i << " ";
+        for (int j = 0; j < m_game.cols(); j++)
+        {
+            char target = m_board[i][j];
+            if (target != '.' && target != 'o' && target != 'X')
+            {
+                //  a. If the shotOnly parameter is false, use the ship's symbol to display an undamaged ship segment; if the shotsOnly parameter is true, show a period to display an undamaged ship segment.
+                if (shotsOnly)
+                {
+                    cout << '.';
+                    continue;
+                }
+            }
+            cout << m_board[i][j];
+        }
+        cout << endl;
+    }
+    
+//    cout << "  ";
+//    for (int i = 0; i < m_game.cols(); i++) cout << i;
+//    cout << endl;
+//    for (int i = 0; i < m_game.rows(); i++)
+//    {
+//        cout << i << " ";
+//        for (int j = 0; j < m_game.cols(); j++)
+//            cout << m_placement[i][j];
+//        cout << endl;
+//    }
+//    b. Use an X character to display any damaged ship segment.
+//    c. Use a period to display water where no attack has been made.
+//    d. Use a lower case letter o character to display water where an attack has
+//    been made that missed a ship.
+}
+
+bool BoardImpl::attackChecker(Point p)
+{
+    //if (the attack point is outside of the board area) return false;
+    if (p.r < 0 || p.r >= m_game.rows() || p.c < 0 || p.c >= m_game.cols()) return false;
+    //if (an attack is made on a previously attacked location)  return false;
+    else if (m_board[p.r][p.c] == 'o' || m_board[p.r][p.c] == 'X') return false;
+    else return true;
+}
+
+bool BoardImpl::attack(Point p, bool& shotHit, bool& shipDestroyed, int& shipId)
+{
+    if (attackChecker(p) == false)  return false;
+    //If any undamaged segment of a ship is at position p on the board, then the shotHit parameter must be set to true, and the segment must henceforth be considered a damaged segment. Otherwise the shotHit parameter must be set to false.
+    char symbol = m_board[p.r][p.c];
+    if (symbol != 'o' && symbol != 'X' && symbol != '.')
+    {
+        //If this specific attack destroyed the last undamaged segment of a ship, then the shipDestroyed parameter must be set to true and the shipId parameter must be set to the ship ID of the ship that was destroyed; otherwise the shipDestroyed parameter must be set to false and shipId must be left unchanged.
+        if (isLastUndamaged(p, symbol))
+        {
+            shipDestroyed = true;
+            shipId = findShipId(symbol);
+        }
+        else
+            shipDestroyed = false;
+        
+        shotHit = true;
+        m_board[p.r][p.c] = 'X';
+    }
+    else
+    {
+        if (symbol == '.')
+            m_board[p.r][p.c] = 'o';
+        shipDestroyed = false;
+        shotHit = false;
+    }
+    return true;
+}
+
+bool BoardImpl::allShipsDestroyed() const
+{
+//This function returns true if all ships have been completely destroyed on the current board and false otherwise. (If this is true, it means that the player who was attacking that board has won the game.)
+    for (int i = 0; i < m_game.rows(); i++)
+    {
+        for (int j = 0; j < m_game.cols(); j++)
+        {
+            if (m_board[i][j] != 'X' && m_board[i][j] != 'o' && m_board[i][j] != '.')
+                return false;
+        }
+    }
+    return true;
+}
