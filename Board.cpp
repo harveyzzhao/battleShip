@@ -294,11 +294,6 @@ bool BoardImpl::allShipsDestroyed() const
     return true;
 }
 
-//void BoardImpl::cheekyRemove(int r, int c)
-//{
-//    m_board[r][c] = '*';
-//}
-
 //void BoardImpl::dump() const
 //{
 //    //dump everything in m_placedShips
